@@ -20,6 +20,7 @@ const CameraScreen = () => {
   const [index, setIndex] = useRecoilState(activeTab);
   const [isModalVisible, setModalVisible] = useState(false);
   const [cameraType, setCameraType] = useState(Camera.Constants.Type.back);
+  const [camera, setCamera] = useState(null);
   const video = React.useRef(null);
   useEffect(() => {
     let mounted = true;
