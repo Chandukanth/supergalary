@@ -1,24 +1,30 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, FlatList, StyleSheet, Dimensions } from 'react-native';
 import { Button, Dialog, Portal } from 'react-native-paper';
 import { deleteImage, fetchImages, insertBulkImages, updateComment, updateImageLikedStatus } from '../database/db';
 import { useRecoilState } from 'recoil';
-import { activeTab } from '../lib/atom';
+import { activeTab, colaps } from '../lib/atom';
 import Card from '../components/Card';
 import { FloatingAction } from "react-native-floating-action";
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+const { height: screenHeight } = Dimensions.get('screen')
 
 const HomeScreen = () => {
   const [media, setMedia] = useState([]);
   const [index, setIndex] = useRecoilState(activeTab);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [selectedImageId, setSelectedImageId] = useState(null);
+  const [isCollapsed, setCollapsed] = useRecoilState(colaps);
+  const [viewAbleItems, setViewAbleItems] = useState(null)
+  const [dynamicViewLogic, setDynamicViewLogic] = useState(false);
 
+  const flatListRef = useRef(null);
   useEffect(() => {
     // Load media from the database on mount
     loadMedia();
   }, [index]);
+
 
   const loadMedia = async () => {
     try {
@@ -99,7 +105,7 @@ const HomeScreen = () => {
     } else {
       try {
         const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          mediaTypes: ImagePicker.MediaTypeOptions.All,
           aspect: [4, 3],
           quality: 1,
           allowsMultipleSelection: true,
@@ -129,47 +135,81 @@ const HomeScreen = () => {
 
     }
   };
+
+
+  const onViewableItemsChanged = ({ viewableItems }) => {
+    if (viewableItems.length !== 0) {
+      setDynamicViewLogic(viewableItems)
+    }
+    // Handle the viewable items based on the dynamicViewLogic state
+    setViewAbleItems(viewableItems[0].item)
+    // Custom logic when dynamicViewLogic is true
+
+  }
+
+  const viewabilityConfigCallbackPairs = useRef([
+    { onViewableItemsChanged },
+  ]);
+
   return (
-    <View style={{ flex: 1 }}>
-      {media.length === 0 &&
-        <View style={{ justifyContent: 'center', alignItems: 'center', flex: 1 }}>
-          <Text>No media available</Text>
+    <>
+      {index == 1 && (
+        <View style={{ flex: 1 }}>
+          {media.length === 0 &&
+            <View style={{ justifyContent: 'center', alignItems: 'center', flex: 1 }}>
+              <Text>No media available </Text>
+              <Text>click on plus button to add media</Text>
 
-        </View>}
-      <FlatList
-        data={media}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <Card
-            item={item}
-            onDelete={() => showDeleteModal(item.id)}
-            onLike={() => handleLike(item.id, item.isLiked)}
-            onComment={(comment) => handleComment(comment, item.id)}
-            onShare={() => console.log('Share')}
-          />
-        )}
-      />
-      <FloatingAction
-        actions={actions}
-        onPressItem={name => {
-          FloatingButtonPress(name);
-        }}
-      />
+            </View>}
+          {media.length > 0 &&
+            <FlatList
+              ref={flatListRef}
+              data={media.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))}
+              pagingEnabled
 
-      {/* Delete Confirmation Modal */}
-      <Portal>
-        <Dialog visible={deleteModalVisible} onDismiss={hideDeleteModal}>
-          <Dialog.Title>Delete Image</Dialog.Title>
-          <Dialog.Content>
-            <Text>Are you sure you want to delete this image?</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={hideDeleteModal}>Cancel</Button>
-            <Button onPress={() => handleDelete(selectedImageId)}>Delete</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-    </View>
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <Card
+                  item={item}
+                  onDelete={() => showDeleteModal(item.id)}
+                  onLike={() => handleLike(item.id, item.isLiked)}
+                  onComment={(comment) => handleComment(comment, item.id)}
+                  onShare={() => console.log('Share')}
+                  viewableItems={viewAbleItems}
+                  outOfBoundItems={dynamicViewLogic}
+                />
+              )}
+              viewabilityConfig={{ itemVisiblePercentThreshold: 30, waitForInteraction: true }}
+              viewabilityConfigCallbackPairs={viewabilityConfigCallbackPairs.current}
+            />
+          }
+          {media.length == 0 &&
+            <FloatingAction
+              actions={actions}
+              onPressItem={name => {
+                FloatingButtonPress(name);
+              }}
+            />
+          }
+
+          {/* Delete Confirmation Modal */}
+          <Portal>
+            <Dialog visible={deleteModalVisible} onDismiss={hideDeleteModal}>
+              <Dialog.Title>Delete Image</Dialog.Title>
+              <Dialog.Content>
+                <Text>Are you sure you want to delete this image?</Text>
+              </Dialog.Content>
+              <Dialog.Actions>
+                <Button onPress={hideDeleteModal}>Cancel</Button>
+                <Button onPress={() => handleDelete(selectedImageId)}>Delete</Button>
+              </Dialog.Actions>
+            </Dialog>
+          </Portal>
+        </View>
+      )}
+
+    </>
+
   );
 };
 

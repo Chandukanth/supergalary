@@ -7,21 +7,18 @@ import { activeTab } from '../lib/atom';
 import { Video } from 'expo-av';
 import Modal from 'react-native-modal';
 import { Ionicons } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
+import { insertBulkImages, insertImage } from '../database/db';
 import * as ImagePicker from 'expo-image-picker';
 
 const CameraScreen = () => {
   const cameraRef = useRef(null);
   const [isRecording, setRecording] = useState(false);
   const [capturedImage, setCapturedImage] = useState('');
-  const [capturedVideo, setCapturedVideo] = useState(null);
-  console.log("🚀 ~ file: CameraScreen.js:18 ~ CameraScreen ~ capturedVideo:", capturedVideo)
+  const [capturedVideo, setCapturedVideo] = useState('');
   const isFocused = useIsFocused();
   const [index, setIndex] = useRecoilState(activeTab);
   const [isModalVisible, setModalVisible] = useState(false);
   const [cameraType, setCameraType] = useState(Camera.Constants.Type.back);
-  const [camera, setCamera] = useState(null);
-  const video = React.useRef(null);
   useEffect(() => {
     let mounted = true;
 
@@ -29,21 +26,17 @@ const CameraScreen = () => {
       // Request camera and audio recording permissions
       const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
       const { status: audioStatus } = await Camera.requestMicrophonePermissionsAsync();
-      const { status: mediaLibraryStatus } = await MediaLibrary.requestPermissionsAsync();
-
-      if (
-        cameraStatus === 'granted' &&
-        audioStatus === 'granted' &&
-        mediaLibraryStatus === 'granted'
-      ) {
+      if (cameraStatus == 'granted' && audioStatus == 'granted') {
         startCamera();
-      } else {
-        alert('Camera, audio, and media library permissions are required.');
+      }
+
+      if (cameraStatus !== 'granted' || audioStatus !== 'granted') {
+        alert('Camera and audio recording permission is required.');
       }
     })();
 
     return () => {
-      // Cleanup function to stop the camera when the component unmounts
+      // Cleanup function to stop the camera when component unmounts
       mounted && stopCamera();
       mounted = false;
     };
@@ -51,7 +44,7 @@ const CameraScreen = () => {
 
   useEffect(() => {
     // Start or stop the camera based on the screen focus
-    if (index === 0) {
+    if (index == 0) {
       startCamera();
     } else {
       stopCamera();
@@ -76,6 +69,7 @@ const CameraScreen = () => {
   };
 
   const flipCamera = () => {
+    // Toggle between front and back camera types
     setCameraType(
       cameraType === Camera.Constants.Type.back
         ? Camera.Constants.Type.front
@@ -83,102 +77,104 @@ const CameraScreen = () => {
     );
   };
 
-  const onMediaPress = async () => {
+  const onMediaPress = async (name) => {
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         aspect: [4, 3],
         quality: 1,
+        allowsMultipleSelection: true,
       });
 
-      if (!result.cancelled) {
-        if (result.type === 'image') {
-          setCapturedImage(result.uri);
-          setModalVisible(true);
-        } else if (result.type === 'video') {
-          setCapturedVideo(result.uri);
-          setModalVisible(true);
-        }
+      if (!result.canceled) {
+        // Handle selected images (result.uri or result.uris for multiple)
+        const selectedImages = Array.isArray(result.assets) ? result.assets : [result.uri];
+        // Assuming you have an array of objects representing images
+        const imagesToInsert = selectedImages.map(image => ({
+          url: image.uri,  // Use image.uri directly
+          comment: '',     // You can set a default comment or leave it empty
+          isLiked: 0,      // You can set a default value for isLiked
+          created_at: new Date().toISOString(), // Set the current date/time
+        }));
+
+        // Insert the selected images into the database
+        await insertBulkImages(imagesToInsert);
+        console.log('Selected images inserted successfully');
+        // Optionally, you can reload the media data or perform other actions after insertion
       }
     } catch (error) {
-      console.error('Error selecting media:', error);
+      console.error('Error selecting images:', error);
+      // Handle the error appropriately
     }
+
+
   };
 
-  const handleSaveMedia = async () => {
-    if (capturedImage) {
-      await saveImageToLibrary();
-    } else if (capturedVideo) {
-      await saveVideoToLibrary();
-    }
-
+  const handleSaveImage = () => {
+    console.log('Image saved:', capturedImage);
+    insertImage(capturedImage, '', 0, new Date().toISOString())
+      .then((result) => {
+        console.log('Image saved to database:', result);
+      })
+      .catch((error) => {
+        console.error('Error saving image to database.', error);
+      });
     setModalVisible(false);
-  };
-
-  const saveImageToLibrary = async () => {
-    try {
-      const asset = await MediaLibrary.createAssetAsync(capturedImage);
-      console.log('Image saved to library successfully:', asset);
-    } catch (error) {
-      console.error('Error saving image to library:', error);
-    }
-  };
-
-  const saveVideoToLibrary = async () => {
-    try {
-      const asset = await MediaLibrary.createAssetAsync(capturedVideo);
-      console.log('Video saved to library successfully:', asset);
-    } catch (error) {
-      console.error('Error saving video to library:', error);
-    }
   };
 
   const handleCancelSave = () => {
+    // Close the modal
     setModalVisible(false);
   };
 
-  const toggleRecording = async () => {
-    if (isRecording) {
-      await stopRecording();
-    } else {
-      await startRecording();
-    }
-    setRecording(!isRecording);
-  };
+
 
   const startRecording = async () => {
-    if (cameraRef) {
-      setRecording(true);
-      let { uri } = await cameraRef.recordAsync();
-      setCapturedVideo(uri);
+    setRecording(true)
+
+    if (cameraRef.current) {
+      let video = await cameraRef.current.recordAsync();
+      console.log("🚀 ~ file: CameraScreen.js:144 ~ startRecording ~ video:", video)
+      insertImage(video?.uri, '', 0, new Date().toISOString())
+      .then((result) => {
+        console.log('Video saved to database:', result);
+        setCapturedVideo("")
+      })
+      .catch((error) => {
+        console.error('Error saving Video to database.', error);
+      });
+      setCapturedVideo(video?.uri);
     }
   };
 
   const stopRecordingPress = async () => {
-    await stopRecording();
-  };
+    setRecording(false)
+    await stopRecording()
+  }
 
   const stopRecording = async () => {
-    setRecording(false);
-    if (cameraRef) {
-       cameraRef.stopRecording();
+    setRecording(false)
+    if (cameraRef.current) {
+      await cameraRef.current.stopRecording();
+    
     }
   };
 
   const handleButtonPress = async () => {
     if (isRecording) {
-      setRecording(false);
-      return toggleRecording();
-    } else if (!isRecording && cameraRef.current) {
+      return stopRecording()
+    }
+    else if (!isRecording && cameraRef.current) {
       const { uri } = await cameraRef.current.takePictureAsync();
       setCapturedImage(uri);
-      setModalVisible(true);
+      setModalVisible(true)
     }
   };
 
   return (
     <View style={{ flex: 1 }}>
-      {index === 0 && (
+      {index == 0 && (
         <>
           <Camera
             ref={cameraRef}
@@ -189,46 +185,30 @@ const CameraScreen = () => {
           <TouchableOpacity onPress={flipCamera} style={styles.flipContainer}>
             <Ionicons name="camera-reverse" size={32} color="white" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.galleryContainer} onPress={onMediaPress}>
+          <TouchableOpacity style={styles.galaryContainer} onPress={onMediaPress} >
             <Ionicons name="file-tray-full-outline" size={26} color="black" />
           </TouchableOpacity>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              onPress={handleButtonPress}
-              onLongPress={toggleRecording}
-              style={styles.button}
-            />
+          <View
+            style={styles.buttonContainer}
+          >
+
+            <TouchableOpacity onPress={handleButtonPress}
+              onLongPress={startRecording} style={styles.button}>
+              {isRecording && (
+                <View style={{ width: 40, height: 40, backgroundColor: 'red' }}>
+
+                </View>
+              )}
+
+            </TouchableOpacity>
           </View>
-          {isRecording && <Text onPress={stopRecording}>Stop Recording</Text>}
+
 
           <Modal isVisible={isModalVisible}>
             <View style={styles.modalContainer}>
-              {capturedImage && (
-                <Image source={{ uri: capturedImage }} style={styles.modalMedia} />
-              )}
-              {capturedVideo && (
-                <Video
-                ref={video}
-                style={styles.modalMedia}
-                source={{ uri: capturedVideo }}
-
-                useNativeControls
-                resizeMode="contain"
-                isLooping
-                // onPlaybackStatusUpdate={status => setStatus(() => status)}
-             />
-                // <Video
-                //   source={{ uri: capturedVideo }}
-                //   rate={1.0}
-                //   volume={1.0}
-                //   isMuted={false}
-                //   resizeMode="cover"
-                //   shouldPlay
-                //   style={styles.modalMedia}
-                // />
-              )}
+              <Image source={{ uri: capturedImage }} style={styles.modalImage} />
               <View style={styles.modalButtonsContainer}>
-                <TouchableOpacity onPress={handleSaveMedia}>
+                <TouchableOpacity onPress={handleSaveImage}>
                   <Text style={styles.modalButtonText}>Save</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleCancelSave}>
@@ -237,6 +217,7 @@ const CameraScreen = () => {
               </View>
             </View>
           </Modal>
+
         </>
       )}
     </View>
@@ -253,7 +234,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: '40%',
     marginBottom: 20,
-    flexDirection: 'row',
+    flexDirection: 'row'
   },
   flipContainer: {
     position: 'absolute',
@@ -262,9 +243,9 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: '10%',
     marginBottom: 20,
-    flexDirection: 'row',
+    flexDirection: 'row'
   },
-  galleryContainer: {
+  galaryContainer: {
     position: 'absolute',
     width: 40,
     height: 40,
@@ -274,7 +255,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     backgroundColor: 'white',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   button: {
     width: 80,
@@ -284,6 +265,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  recordButton: {
+    backgroundColor: 'red', // Change color to red when recording
+  },
+  buttonText: {
+    fontSize: 14,
+    color: 'black',
+  },
   modalContainer: {
     backgroundColor: 'white',
     padding: 22,
@@ -292,8 +280,11 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderColor: 'rgba(0, 0, 0, 0.1)',
   },
-  modalMedia: {
-    flex: 1
+  modalImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+    margin: 10,
   },
   modalButtonsContainer: {
     flexDirection: 'row',

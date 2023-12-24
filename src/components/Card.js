@@ -1,15 +1,39 @@
-import React, { useState } from 'react';
-import { View, Image, TouchableOpacity, Text, StyleSheet, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Import Ionicons from Expo
+import React, { useState, useRef } from 'react';
+import { View, Image, TouchableOpacity, Text, StyleSheet, TextInput, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import Collapsible from 'react-native-collapsible';
 import * as FileSystem from 'expo-file-system';
+import { Video } from 'expo-av';
+import { useRecoilState } from 'recoil';
+import { colaps } from '../lib/atom';
+import VideoPlayer from './VideoPlayer';
+const { height: screenHeight } = Dimensions.get('screen')
+const { height, width } = Dimensions.get('window');
 
-const Card = ({ item, onDelete, onLike, onComment }) => {
+const Card = ({ item, onDelete, onLike, onComment, outOfBoundItems }) => {
+
+
   const [isCommenting, setIsCommenting] = useState(false);
   const [comment, setComment] = useState(item.comment || '');
-  const [isCollapsed, setCollapsed] = useState(false);
+  const [isCollapsed, setCollapsed] = useRecoilState(colaps);
+  const [shouldPlayVideo, setShouldPlayVideo] = useState(true);
+  const [isVideoVisible, setIsVideoVisible] = useState(true);
 
+  const handleScreenChange = async (playbackStatus) => {
+    if (videoRef.current) {
+      const isPlaying = playbackStatus.isPlaying;
+
+      // Check if the video is currently visible on the screen
+      if (isPlaying && isVideoVisible) {
+        // Video is visible and playing
+      } else {
+        // Video is not visible or not playing, pause it
+        videoRef.current.pauseAsync();
+      }
+    }
+  };
+  const videoRef = useRef(null);
 
   const toggleCollapse = () => {
     setCollapsed(!isCollapsed);
@@ -17,6 +41,7 @@ const Card = ({ item, onDelete, onLike, onComment }) => {
       setIsCommenting(true);
     }
   };
+
   const handleCommentChange = (text) => {
     setComment(text);
   };
@@ -30,24 +55,25 @@ const Card = ({ item, onDelete, onLike, onComment }) => {
     try {
       const localFilePath = item.url.startsWith('file://')
         ? item.url
-        : `${FileSystem.documentDirectory}downloaded_image.jpg`;
-  
+        : `${FileSystem.documentDirectory}downloaded_media`;
+
       await FileSystem.copyAsync({
         from: localFilePath,
-        to: `${FileSystem.documentDirectory}new_location/downloaded_image.jpg`,
+        to: `${FileSystem.documentDirectory}download/downloaded_media`,
       });
-  
+
+      alert('Downloaded successfully')
+
       console.log('Downloaded successfully');
     } catch (error) {
-      console.error('Error downloading image:', error);
+      console.error('Error downloading media:', error);
     }
   };
-  
 
   const onShare = async () => {
     try {
       const sharingOptions = {
-        dialogTitle: 'Share Image', // Specify the dialog title here
+        dialogTitle: 'Share Media', // Specify the dialog title here
       };
 
       const result = await Sharing.shareAsync(item.url, {
@@ -64,9 +90,32 @@ const Card = ({ item, onDelete, onLike, onComment }) => {
     }
   };
 
+  const onVideoEnteredScreen = () => {
+    // Set the state to indicate that the video is visible
+    setIsVideoVisible(true);
+  };
+
+  const onVideoExitedScreen = () => {
+    // Set the state to indicate that the video is not visible
+    setIsVideoVisible(false);
+  };
+
+
+
   return (
-    <View style={styles.cardContainer}>
-      <Image source={{ uri: item.url }} style={styles.cardImage} />
+    <View onEnter={onVideoEnteredScreen}
+      onExit={onVideoExitedScreen} style={styles.cardContainer}>
+      {item.url.toLowerCase().endsWith('.jpg') || item.url.toLowerCase().endsWith('.jpeg') || item.url.toLowerCase().endsWith('.png') ? (
+        <Image source={{ uri: item.url }} style={styles.cardImage} />
+      ) : (
+        <VideoPlayer
+          height={height / 1.6}
+          width={width}
+          videoUri={item.url}
+          item={item}
+          outOfBoundItems={outOfBoundItems}
+        />
+      )}
       <View style={styles.cardActions}>
         <View style={styles.iconContainer}>
           <TouchableOpacity onPress={onLike}>
@@ -83,18 +132,16 @@ const Card = ({ item, onDelete, onLike, onComment }) => {
             <Ionicons name="share-social-outline" size={24} color="black" />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleDownload}>
-          <Ionicons name="download-outline" size={24} color="black" />
-        </TouchableOpacity>
+            <Ionicons name="download-outline" size={24} color="black" />
+          </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={onDelete}>
           <Ionicons name="trash-outline" size={24} color="black" />
         </TouchableOpacity>
-       
       </View>
       <Collapsible easing={'easeInOutCubic'} collapsed={isCollapsed}>
-        {isCommenting &&
+        {isCommenting && (
           <View style={styles.commentContainer}>
-
             <>
               <TextInput
                 style={styles.commentInput}
@@ -106,10 +153,8 @@ const Card = ({ item, onDelete, onLike, onComment }) => {
                 <Ionicons name="send-outline" size={24} color="black" />
               </TouchableOpacity>
             </>
-
           </View>
-        }
-
+        )}
 
         {item.comment && !isCommenting && (
           <TouchableOpacity onPress={() => setIsCommenting(true)} style={styles.existingCommentContainer}>
@@ -119,13 +164,16 @@ const Card = ({ item, onDelete, onLike, onComment }) => {
       </Collapsible>
     </View>
   );
+
 };
 
+
+export default Card;
 const styles = StyleSheet.create({
   cardContainer: {
     margin: 10,
     padding: 16,
-    height: 280,
+    height: screenHeight - 68,
     backgroundColor: 'white',
     borderRadius: 10,
     elevation: 3, // for shadow on Android
@@ -140,6 +188,8 @@ const styles = StyleSheet.create({
   cardImage: {
     flex: 1,
     borderRadius: 8,
+    objectFit: 'cover',
+    backgroundColor: 'black'
   },
   cardActions: {
     flexDirection: 'row',
@@ -181,5 +231,3 @@ const styles = StyleSheet.create({
     color: '#333',
   },
 });
-
-export default Card;
