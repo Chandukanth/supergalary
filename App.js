@@ -10,8 +10,8 @@ import { StatusBar } from "react-native";
 const Stack = createNativeStackNavigator();
 
 const App = () => {
-  StatusBar.setBackgroundColor("#fff")
-  StatusBar.setBarStyle("dark-content")
+  StatusBar.setBackgroundColor("black")
+  StatusBar.setBarStyle('light-content')
   React.useEffect(() => {
     init()
       .then(() => {

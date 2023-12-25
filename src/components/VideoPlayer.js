@@ -3,19 +3,38 @@ import { View, Image, StyleSheet, Text, Dimensions } from 'react-native';
 import { Video } from 'expo-av';
 import { Feather } from "react-native-vector-icons";
 import VideoControls from './VideoControls';
+
 const { height, width } = Dimensions.get('window');
 export default function VideoPlayer(props) {
     const {
         videoUri,
         outOfBoundItems,
-        item
+        item,
+        isCollapsed
     } = props;
+    const styles = StyleSheet.create({
+        video: {
+            alignSelf: 'center',
+            width: width - 30,
+            height:!isCollapsed ? height / 1.45 : height /1.3,
+            marginHorizontal : 20
+        },
+        container: {
+            flex: 1,
+            justifyContent: 'center'
+        },
+        controlsContainer: {
+            position: 'absolute',
+            bottom:isCollapsed ? 10 : 50
+        }
+    });
     const playbackInstance = useRef(null);
     const [playbackInstanceInfo, setPlaybackInstanceInfo] = useState({
         position: 0,
         duration: 0,
-        state: 'Buffering'
+        state: 'Paused'
     });
+    const [isMuted, setIsMuted] = useState(false)
     useEffect(() => {
         return () => {
             if (playbackInstance.current) {
@@ -45,7 +64,6 @@ export default function VideoPlayer(props) {
         }
     }
     const updatePlaybackCallback = (status) => {
-        console.log(status, 'status');
         if (status.isLoaded) {
             setPlaybackInstanceInfo({
                 ...playbackInstanceInfo,
@@ -63,13 +81,17 @@ export default function VideoPlayer(props) {
             }
         }
     }
+
+    const toggleMuted = () => {
+        setIsMuted(!isMuted)
+    }
     return (
         <View style={{ flex: 1, marginBottom: 20 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, marginBottom: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Image style={{ height: 30, width: 30, borderRadius: 30 }} source={{ uri: item.profile }} />
                     <Text style={{ marginLeft: 10, color: '#fff', fontSize: 15, fontWeight: 'bold' }}>
-                        {item.name}
+                        {item?.name}
                     </Text>
                 </View>
                 <View>
@@ -82,6 +104,7 @@ export default function VideoPlayer(props) {
                 source={{ uri: videoUri }}
                 resizeMode="cover"
                 isLooping={false}
+                isMuted={isMuted}
                 shouldPlay
                 onPlaybackStatusUpdate={updatePlaybackCallback}
             />
@@ -92,24 +115,10 @@ export default function VideoPlayer(props) {
                     playbackInstanceInfo={playbackInstanceInfo}
                     setPlaybackInstanceInfo={setPlaybackInstanceInfo}
                     togglePlay={togglePlay}
+                    toggleMuted={toggleMuted}
+                    isMuted={isMuted}
                 />
             </View>
         </View>
     );
 }
-const styles = StyleSheet.create({
-    video: {
-        alignSelf: 'center',
-        width: width - 30,
-        height: height / 1.3,
-        marginHorizontal : 20
-    },
-    container: {
-        flex: 1,
-        justifyContent: 'center'
-    },
-    controlsContainer: {
-        position: 'absolute',
-        bottom: 10
-    }
-});

@@ -8,3 +8,7 @@ export const activeTab = atom({
     key: 'Colaps',
     default: true,
   });
+  export const activeIndex = atom({
+    key: 'Index',
+    default: 0,
+  });
